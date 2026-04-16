@@ -44,33 +44,14 @@ Go
 
 -- Criando tabela --
  Alter table Tab.TabFonteDeDados
- add ocorrencia_id int identity(1,1) primary key
+ add fontededados_id int identity(1,1)
  Go
 
  Alter table Tab.TabFonteDeDados
-add Constraint PK_TabFonteDeDados_ocorrencia_id Primary key (ocorrencia_id)
+add Constraint PK_TabFonteDeDados_fontededados_id Primary key (fontededados_id)
 Go
 
-/*(codigo_ocorrencia int identity(1,1) not null,
-ocorrencia_classificacao Varchar(20) not null,
-ocorrencia_cidade varchar(30) not null,
-ocorrencia_uf varchar(2) not null,
-ocorrencia_pais varchar(10) not null,
-ocorrencia_aerodromo varchar(4),
-ocorrencia_dia Date,
-ocorrencia_hora Time,
-investigacao_aeronave_liberada varchar(3),
-investigacao_status varchar(10),
-divulgacao_relatorio_publicado varchar(3),
-total_aeronaves_envolvidas tinyint,
-ocorrencia_saida_pista varchar(3))
-go */
-
--- Definindo a Segunda-Feira como primeiro dia da semana --
-Set DateFist 1
-Go
-
--- Criando tabela Dim --
+-- Criando tabela DimTime --
 --para pegar a coluna de data pegar sem repetição "Distinct"--
 Create table Dim.DimTime
 	(TimeID int identity(1,1) not null,
@@ -101,7 +82,7 @@ Create table Dim.DimTime
 	 Constraint [PK_DimTime_TimeID] Primary key Clustered (TimeID))
 Go
 
--- Populando as Datas com base na tabela fonte de dados Coluna "ocorrencia_dia" --
+-- Populando as Datas com base na tabela fonte de dados Coluna "ocorrencia_dia e ocorrencia_hora" --
 Alter table Tab.TabFonteDeDados
 add DataCalendario As (Cast(ocorrencia_dia As Datetime) + Cast(Isnull(ocorrencia_hora, '00:00:00') As Datetime))
 Go
@@ -187,3 +168,67 @@ Select Day(DataCalendario) As Dia,
 	   End As FeriadoPorExtenso
 From Tab.TabFonteDeDados
 Go
+
+-- Criando tabela DimLocal --
+Create table Dim.DimLocal
+(LocalID int identity(1,1) not null,
+ Cidade varchar(50) not null,
+ Unidade_federativa nvarchar(50) not null,
+ Pais varchar(50),
+ Voo_origem nvarchar(100),
+ Voo_destino nvarchar(100),
+ Constraint [PK_DimLocal_LocalID] primary key clustered (LocalID)
+)
+Go
+
+-- inserindo dados da tabel Fonte para a tabela DimLocal --
+insert into Dim.DimLocal ( [Cidade], [Unidade_federativa], [Pais],
+[Voo_origem], [Voo_destino] )
+Select ocorrencia_cidade, ocorrencia_uf, ocorrencia_pais, aeronave_voo_origem, aeronave_voo_destino
+From Tab.TabFonteDeDados
+Go
+
+-- Criando a tabela DimAeronave --
+Create table Dim.DimAeronave 
+(AeronaveID int identity(1,1) not null,
+ Tipo_Aeronave nvarchar(50),
+ Modelo_Aeronave nvarchar(50),
+ Matricula_Aeronave nvarchar(50),
+ Fabricante_Aeronave nvarchar(50),
+ Ano_Fabricacao_Aeronave smallint,
+ Motor_Aeronave nvarchar(50),
+ Quantidade_Motor_Aeronave tinyint,
+ Quantidade_Motor_Extenso_Aeronave nvarchar(50),
+ Acentos_Aeronave smallint,
+)
+Go
+
+Insert into Dim.DimAeronave ( [Tipo_Aeronave], [Modelo_Aeronave], [Matricula_Aeronave], [Fabricante_Aeronave],
+[Ano_Fabricacao_Aeronave], [Motor_Aeronave], [Quantidade_Motor_Aeronave], [Quantidade_Motor_Extenso_Aeronave],
+[Acentos_Aeronave] )
+Select [aeronave_tipo_equipamento], [aeronave_modelo], [aeronave_matricula], [aeronave_fabricante],
+[aeronave_ano_fabricacao], [aeronave_motor_tipo], [anv_motor_qtd], [anv_motor_descricao_qtd], [aeronave_assentos]
+From Tab.TabFonteDeDados
+Go
+
+-- Consertando os nulls da tabela DimAeronave --
+UPDATE Dim.DimAeronave
+SET Ano_Fabricacao_Aeronave = 0
+WHERE Ano_Fabricacao_Aeronave IS NULL
+
+UPDATE Dim.DimAeronave
+SET Quantidade_Motor_Aeronave = 1 
+WHERE Quantidade_Motor_Aeronave IS NULL
+
+UPDATE Dim.DimAeronave
+SET Acentos_Aeronave = CASE 
+    WHEN Quantidade_Motor_Aeronave = 1 THEN 2
+    WHEN Quantidade_Motor_Aeronave = 2 THEN 4
+    WHEN Quantidade_Motor_Aeronave = 3 THEN 11
+    ELSE 2
+END
+where Acentos_Aeronave is null;
+
+UPDATE Dim.DimAeronave
+SET Acentos_Aeronave = 2
+WHERE Acentos_Aeronave = 0
